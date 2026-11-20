@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<A enabled="1" hidden="0" left="0.192308" right="0.269231" top="0.3125" bottom="0.4375" color="16733440" />
+<B enabled="1" hidden="0" left="0.269231" right="0.346154" top="0.3125" bottom="0.4375" color="16733440" />
+<C enabled="1" hidden="0" left="0.192308" right="0.269231" top="0.4375" bottom="0.5625" color="33023" />
+<D enabled="1" hidden="0" left="0.269231" right="0.346154" top="0.4375" bottom="0.5625" color="33023" />
+<E enabled="1" hidden="0" left="0.192308" right="0.269231" top="0.5625" bottom="0.6875" color="1769242" />
+<F enabled="1" hidden="0" left="0.269231" right="0.346154" top="0.5625" bottom="0.6875" color="1769242" />
+<G enabled="1" hidden="1" left="0.192308" right="0.269231" top="0.6875" bottom="0.8125" color="0" />
+<H enabled="1" hidden="1" left="0.269231" right="0.346154" top="0.6875" bottom="0.8125" color="0" />
+<I enabled="1" hidden="1" left="0.192308" right="0.269231" top="0.8125" bottom="0.9375" color="0" />
+<J enabled="1" hidden="1" left="0.269231" right="0.346154" top="0.8125" bottom="0.9375" color="0" />
+<quad_slide_1 enabled="1" hidden="0" left="0.384615" right="0.461538" top="0.4375" bottom="0.5625" color="0" />
+<quad_slide_2 enabled="1" hidden="0" left="0.538462" right="0.615385" top="0.4375" bottom="0.5625" color="0" />
+<quad_slide_3 enabled="1" hidden="1" left="0.384615" right="0.461538" top="0.6875" bottom="0.8125" color="0" />
+<quad_slide_4 enabled="1" hidden="1" left="0.538462" right="0.615385" top="0.6875" bottom="0.8125" color="0" />

@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<weapon1 enabled="1" hidden="0" left="0.0384615" right="0.115385" top="0.875" bottom="1" color="0" />
+<weapon2 enabled="1" hidden="0" left="0.115385" right="0.192308" top="0.875" bottom="1" color="0" />
+<weapon3 enabled="1" hidden="0" left="0.192308" right="0.269231" top="0.875" bottom="1" color="0" />
+<weapon4 enabled="1" hidden="0" left="0.269231" right="0.346154" top="0.875" bottom="1" color="0" />
+<weapon5 enabled="1" hidden="0" left="0.346154" right="0.423077" top="0.875" bottom="1" color="0" />
+<weapon6 enabled="1" hidden="0" left="0.576923" right="0.653846" top="0.875" bottom="1" color="0" />
+<weapon7 enabled="1" hidden="0" left="0.653846" right="0.730769" top="0.875" bottom="1" color="0" />
+<weapon8 enabled="1" hidden="0" left="0.730769" right="0.807692" top="0.875" bottom="1" color="0" />
+<weapon9 enabled="1" hidden="0" left="0.807692" right="0.884615" top="0.875" bottom="1" color="0" />
+<weapon0 enabled="1" hidden="0" left="0.884615" right="0.961538" top="0.875" bottom="1" color="0" />

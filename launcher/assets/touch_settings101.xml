@@ -1,0 +1,2 @@
+<?xml version="1.0" ?>
+<settings alpha="0.5" look_sens="1" turn_sens="1" fwd_sens="1" strafe_sens="1" deadzone_sens="0.1" precision_sens="0.3" dig_move_y_sens="0.5" dig_move_x_sens="0.5" dbl_tap_left="0" dbl_tap_right="0" volume_up="0" volume_down="0" default_color="16777215" digital_move="0" always_run_default="1" invert_switch="0" joystick_look_switch="0" fixed_move_stick="0" show_custom="0" auto_hide_inventory="1" auto_hide_numbers="1" show_left_stick="1" show_right_stick="1" weapon_wheel_enabled="1" weapon_wheel_opaque="0" precision_shoot="0" />

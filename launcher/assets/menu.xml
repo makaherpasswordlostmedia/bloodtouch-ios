@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<back enabled="1" hidden="0" left="0" right="0.0769231" top="0" bottom="0.125" color="0" />
+<down_arrow enabled="1" hidden="0" left="0.769231" right="0.884615" top="0.8125" bottom="1" color="0" />
+<up_arrow enabled="1" hidden="0" left="0.769231" right="0.884615" top="0.625" bottom="0.8125" color="0" />
+<left_arrow enabled="1" hidden="0" left="0.653846" right="0.769231" top="0.8125" bottom="1" color="0" />
+<right_arrow enabled="1" hidden="0" left="0.884615" right="1" top="0.8125" bottom="1" color="0" />
+<enter enabled="1" hidden="0" left="0" right="0.230769" top="0.625" bottom="1" color="0" />
+<keyboard enabled="1" hidden="0" left="0.0769231" right="0.153846" top="0" bottom="0.125" color="0" />
+<gamepad enabled="1" hidden="0" left="0.846154" right="0.923077" top="0" bottom="0.125" color="0" />
+<gyro enabled="1" hidden="0" left="0.923077" right="1" top="0" bottom="0.125" color="0" />
+<load_save_touch enabled="1" hidden="0" left="0.769231" right="0.846154" top="0" bottom="0.125" color="0" />
+<slide_mouse enabled="1" hidden="1" left="0.923077" right="1" top="0.1875" bottom="0.6875" color="0" />

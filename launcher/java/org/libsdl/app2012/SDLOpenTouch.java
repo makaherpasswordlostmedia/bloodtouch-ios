@@ -1,0 +1,547 @@
+package org.libsdl.app2012;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.os.Message;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.text.InputType;
+import android.util.Log;
+import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import com.opentouchgaming.androidcore.AppInfo;
+import com.opentouchgaming.androidcore.AppSettings;
+import com.opentouchgaming.androidcore.Utils;
+import com.opentouchgaming.androidcore.controls.ControlInterpreter;
+import com.opentouchgaming.androidcore.controls.GamepadDefinitions;
+import com.opentouchgaming.androidcore.controls.TouchSettings;
+
+import org.libsdl.app.NativeConsoleBox;
+import org.libsdl.app.NativeLib;
+
+import java.io.File;
+
+public class SDLOpenTouch
+{
+    static final String TAG = "SDLOpenTouch";
+
+    static float resDiv = 1.0f;
+    static boolean divDone = false;
+    public static boolean enableVibrate;
+
+    static String userFiles;
+
+    static NativeLib engine;
+
+    static ControlInterpreter controlInterp;
+
+    static SDLOpenTouchGyro gyro;
+
+    static String quickCommandMainPath;
+    static String quickCommandModPath;
+
+    static boolean ownControls;
+
+    static com.bloodtouch.BloodControls bloodControls;
+
+    static void onPause(Context context)
+    {
+        // A legitimate pause stops the render loop too, so the watchdog has to be blind here.
+        com.bloodtouch.RenderWatchdog.stop();
+        SDLAudioManager.onPause();
+    }
+
+    public static void onResume(Context context)
+    {
+        if (controlInterp != null)
+        {
+            controlInterp.loadGameControlsFile();
+        }
+        sendWeaponWheelSettings(context);
+        SDLAudioManager.onResume();
+        com.bloodtouch.RenderWatchdog.start(userFiles);
+    }
+
+    public static void Setup(Activity activity, Intent intent)
+    {
+        AppSettings.reloadSettings(activity);
+
+        ownControls = intent.getBooleanExtra("own_controls", false);
+        if (ownControls)
+        {
+            // RunApplication turns this into GAME_OPTION_HIDE_MENU_AND_GAME, which stops
+            // libtouchcontrols.so from drawing or hit-testing its own overlay.
+            TouchSettings.hideGameAndMenuTouch = true;
+
+            com.bloodtouch.BloodControls.configure(intent.getIntExtra("control_mode", 0),
+                    intent.getFloatExtra("look_sensitivity", 1.0f),
+                    intent.getBooleanExtra("invert_look", false));
+        }
+
+        AppInfo.Apps app = AppInfo.Apps.valueOf(intent.getStringExtra("app"));
+
+        AppInfo.setContext(activity);
+        AppInfo.setApp(app);
+
+        NativeConsoleBox.init(activity);
+
+        // Load FMOD if needed
+        if (intent.getBooleanExtra("load_fmod", false))
+        {
+            try
+            {
+                System.loadLibrary("fmod");
+            }
+            catch (UnsatisfiedLinkError e)
+            {
+                System.err.println(e.getMessage());
+            }
+            catch (Exception e)
+            {
+                System.err.println(e.getMessage());
+            }
+        }
+
+        // Load libraries
+        try
+        {
+            // Load game libs
+            String[] loadLibs = intent.getStringArrayExtra("load_libs");
+            for (String lib : loadLibs)
+            {
+                Log.d(TAG, "Loading: " + lib);
+                System.loadLibrary(lib);
+            }
+        }
+        catch (UnsatisfiedLinkError e)
+        {
+            System.err.println(e.getMessage());
+        }
+        catch (Exception e)
+        {
+            System.err.println(e.getMessage());
+        }
+
+        // fullscreen
+        activity.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+
+        // keep screen on
+        activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        Utils.setImmersionMode(activity, activity.getWindow(),  "hide_nav_bar");
+        Utils.expandToCutout(activity, activity.getWindow(), "expand_into_notch");
+
+        gyro = new SDLOpenTouchGyro(activity, activity.getWindowManager().getDefaultDisplay().getRotation());
+
+        engine = new NativeLib();
+        controlInterp = new ControlInterpreter(activity, engine, GamepadDefinitions.getDefinition(AppInfo.app), TouchSettings.gamePadEnabled,
+                TouchSettings.altTouchCode);
+
+        enableVibrate = AppSettings.getBoolOption(activity, "enable_vibrate", true);
+        resDiv = intent.getFloatExtra("res_div_float", 1.0f);
+    }
+
+    public static String ReplaceDisplaySize(String test, float width, float height)
+    {
+        test = test.replace("$W2", Integer.toString((int) (width / 2)));
+        test = test.replace("$H2", Integer.toString((int) (height / 2)));
+        test = test.replace("$W3", Integer.toString((int) (width / 3)));
+        test = test.replace("$H3", Integer.toString((int) (height / 3)));
+        test = test.replace("$W4", Integer.toString((int) (width / 4)));
+        test = test.replace("$H4", Integer.toString((int) (height / 4)));
+
+        test = test.replace("$W", Integer.toString((int) (width)));
+        test = test.replace("$H", Integer.toString((int) (height)));
+
+        return test;
+    }
+
+    public static void RunApplication(Activity activity, Intent intent, float displayWidth, float displayHeight)
+    {
+        {
+            int fbWidth = 0;
+            int fbHeight = 0;
+
+            String frameBufferWidth = intent.getStringExtra("framebuffer_width");
+            String frameBufferHeight = intent.getStringExtra("framebuffer_height");
+
+            boolean maintainAspect = intent.getBooleanExtra("framebuffer_maintain_aspect", false);
+
+            if (frameBufferWidth != null && frameBufferHeight != null)
+            {
+                frameBufferWidth = ReplaceDisplaySize(frameBufferWidth, displayWidth, displayHeight);
+                frameBufferHeight = ReplaceDisplaySize(frameBufferHeight, displayWidth, displayHeight);
+                try
+                {
+                    fbWidth = Integer.decode(frameBufferWidth);
+                    fbHeight = Integer.decode(frameBufferHeight);
+                }
+                catch (Exception e)
+                {
+
+                }
+            }
+            NativeLib.setFramebufferSize(fbWidth, fbHeight, maintainAspect ? 1 : 0);
+        }
+
+        String args = intent.getStringExtra("args");
+
+        args = ReplaceDisplaySize(args, displayWidth, displayHeight);
+
+        String[] args_array = Utils.creatArgs(args);
+
+        String gamePath = intent.getStringExtra("game_path");
+
+        int options = 0;
+        if (TouchSettings.gamepadHidetouch)
+            options |= TouchSettings.GAME_OPTION_AUTO_HIDE_GAMEPAD;
+
+        if (TouchSettings.hideGameAndMenuTouch)
+            options |= TouchSettings.GAME_OPTION_HIDE_MENU_AND_GAME;
+
+        if (TouchSettings.useSystemKeyboard)
+            options |= TouchSettings.GAME_OPTION_USE_SYSTEM_KEYBOARD;
+
+        int gles_version = intent.getIntExtra("gles_version", 1);
+
+        if (gles_version == 2)
+            options |= TouchSettings.GAME_OPTION_GLES2;
+
+        if (gles_version == 3)
+            options |= TouchSettings.GAME_OPTION_GLES3;
+
+        if (gles_version == 4)
+            options |= TouchSettings.GAME_OPTION_VULKAN;
+
+        boolean touchSurfaceview = intent.getBooleanExtra("touch_surfaceview", false);
+
+        if(touchSurfaceview)
+            options |= TouchSettings.GAME_OPTION_TOUCH_SURFACE_VIEW;
+
+        int audioBackend = intent.getIntExtra("audio_backend", 0);
+        if (audioBackend == 1)
+            options |= TouchSettings.GAME_OPTION_SDL_OLD_AUDIO;
+        else if (audioBackend == 2)
+            options |= TouchSettings.GAME_OPTION_SDL_AAUDIO_AUDIO;
+
+        int sdlMidiPlayer = intent.getIntExtra("sdl_midi_player", 0); //0 = default timidity, 1 = fluidsynth
+        if (sdlMidiPlayer == 1)
+            options |= TouchSettings.GAME_OPTION_SDL_MIDI_FLUIDSYNTH;
+
+        if (intent.getBooleanExtra("use_gl4es", false))
+            options |= TouchSettings.GAME_OPTION_GL4ES;
+
+        int freq = intent.getIntExtra("audio_freq", 0);
+        int samples = intent.getIntExtra("audio_samples", 0);
+
+        NativeLib.audioOverride(freq, samples);
+
+        int gameType = intent.getIntExtra("game_type", 0);
+        int wheelNbr = intent.getIntExtra("wheel_nbr", 10);
+
+        quickCommandMainPath = intent.getStringExtra("quick_command_main_path");
+        quickCommandModPath = intent.getStringExtra("quick_command_mod_path");
+
+        userFiles = intent.getStringExtra("user_files");
+        String logFilename = intent.getStringExtra("log_filename");
+        String tmpFiles = activity.getCacheDir().getAbsolutePath();
+        String sourceDir = activity.getApplicationContext().getApplicationInfo().sourceDir;
+        String nativeSoPath = activity.getApplicationInfo().nativeLibraryDir;
+        String pngFiles = activity.getFilesDir().getAbsolutePath();
+        String resDir = intent.getStringExtra("res_files");
+
+        Utils.copyPNGAssets(activity, pngFiles);
+
+        File folder = new File(nativeSoPath);
+        File[] listOfFiles = folder.listFiles();
+
+        for (int i = 0; i < listOfFiles.length; i++)
+        {
+            if (listOfFiles[i].isFile())
+            {
+                Log.v(TAG, "File " + listOfFiles[i].getName());
+            }
+            else if (listOfFiles[i].isDirectory())
+            {
+                Log.v(TAG, "Directory " + listOfFiles[i].getName());
+            }
+        }
+        Log.v(TAG, "Native .so path = " + nativeSoPath);
+        Log.v(TAG, "gamePath = " + gamePath);
+        Log.v(TAG, "logFilename = " + logFilename);
+
+        int ret = NativeLib.init(pngFiles + "/", options, wheelNbr, args_array, gameType, gamePath, logFilename, nativeSoPath, userFiles, tmpFiles, sourceDir,
+                resDir);
+
+        Log.v(TAG, "SDL thread terminated");
+        //context.finish();
+    }
+
+
+    public static boolean surfaceChanged(Context context, SurfaceHolder holder, int width, int height)
+    {
+        Log.v(TAG, "surfaceChanged: " + width + " x " + height);
+
+        if (ownControls)
+            attachOwnControls();
+
+        if (resDiv != 1.0 && !divDone)
+        {
+            holder.setFixedSize((int) ((width * resDiv) + 0.5), (int) ((height * resDiv) + 0.5));
+            divDone = true;
+            return true;
+        }
+
+        NativeLib.setScreenSize(width, height);
+
+        controlInterp.setScreenSize((int) (width / resDiv), (int) (height / resDiv));
+
+        gyro.reload(context);
+
+        SDLActivity.getMotionListener().setRelativeMouseEnabled(true);
+
+        return false;
+    }
+
+    static public boolean onTouchEvent(MotionEvent event)
+    {
+        return controlInterp.onTouchEvent(event);
+    }
+
+    static private void attachOwnControls()
+    {
+        if (bloodControls != null)
+            return;
+
+        Activity activity = SDLActivity.mSingleton;
+        if (activity == null)
+            return;
+
+        View content = activity.findViewById(android.R.id.content);
+        if (!(content instanceof ViewGroup))
+            return;
+
+        bloodControls = new com.bloodtouch.BloodControls(activity);
+        ((ViewGroup) content).addView(bloodControls);
+        Log.v(TAG, "Own touch controls attached");
+    }
+
+    static public boolean onKey(int keyCode, KeyEvent event)
+    {
+        int source = event.getSource();
+        // Stop right mouse button being backbutton
+        if ((source == InputDevice.SOURCE_MOUSE) || (source == InputDevice.SOURCE_MOUSE_RELATIVE))
+        {
+            Log.v(TAG, "SDLSurface::onKey: is mouse");
+            return true;
+        }
+
+        // We always want the back button to do an escape
+        if (keyCode == KeyEvent.KEYCODE_BACK)
+        {
+            if (event.getAction() == KeyEvent.ACTION_DOWN)
+            {
+                controlInterp.onBackButton();
+            }
+            return true;
+        }
+
+
+        if (event.getAction() == KeyEvent.ACTION_DOWN)
+        {
+            return controlInterp.onKeyDown(keyCode, event);
+        }
+        else if (event.getAction() == KeyEvent.ACTION_UP)
+        {
+            return controlInterp.onKeyUp(keyCode, event);
+        }
+
+        return false;
+    }
+
+    @SuppressLint("MissingPermission")
+    private static void vibrate(Context context, int duration)
+    {
+        if (enableVibrate)
+        {
+            Vibrator v = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            // Vibrate for 500 milliseconds
+            if (v != null)
+            {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                {
+                    v.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
+                }
+                else
+                {
+                    //deprecated in API 26
+                    v.vibrate(duration);
+                }
+            }
+        }
+    }
+
+    protected static final int COMMAND_SET_BACKLIGHT = 0x8001;
+    protected static final int COMMAND_SHOW_GYRO_OPTIONS = 0x8002;
+    protected static final int COMMAND_SHOW_KEYBOARD = 0x8003;
+    protected static final int COMMAND_SHOW_GAMEPAD = 0x8004;
+    protected static final int COMMAND_VIBRATE = 0x8005;
+    protected static final int COMMAND_LOAD_SAVE_CONTROLS = 0x8006;
+    protected static final int COMMAND_EXIT_APP = 0x8007;
+    protected static final int COMMAND_SHOW_QUICK_COMMANDS = 0x8008;
+
+    static public boolean CommandHandler(Activity activity, Message msg)
+    {
+        boolean handled = true;
+
+        switch (msg.arg1)
+        {
+            case COMMAND_SET_BACKLIGHT:
+            {
+                Integer value = (Integer) msg.obj;
+                Log.d(TAG, "Set backlight " + value);
+                String text = "";
+                float brightness = (float) value / 255.f;
+
+                WindowManager.LayoutParams layoutParams = activity.getWindow().getAttributes();
+                layoutParams.screenBrightness = brightness;
+                activity.getWindow().setAttributes(layoutParams);
+
+                break;
+            }
+            case COMMAND_SHOW_GYRO_OPTIONS:
+            {
+                // This build has no in-game settings UI, the stored gyro options are re-applied.
+                gyro.reload(activity);
+                break;
+            }
+            case COMMAND_SHOW_GAMEPAD:
+            {
+                Toast.makeText(activity, "Редактор раскладки геймпада не в сборке", Toast.LENGTH_SHORT).show();
+                break;
+            }
+            case COMMAND_SHOW_KEYBOARD:
+            {
+                //showTextInput(0,0,100,10);
+
+                InputMethodManager imm = (InputMethodManager) activity.getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null)
+                {
+                    //imm.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0);
+                    SDLActivity.mSurface.clearFocus();
+                    SDLActivity.mSurface.requestFocus();
+                    //imm.showSoftInput(SDLActivity.mSurface,0);
+                    imm.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0);
+                }
+
+                break;
+            }
+            case COMMAND_VIBRATE:
+            {
+                Integer value = (Integer) msg.obj;
+                vibrate(activity, value);
+                break;
+            }
+            case COMMAND_LOAD_SAVE_CONTROLS:
+            {
+                showLayoutDialog(activity);
+                break;
+            }
+            case COMMAND_SHOW_QUICK_COMMANDS:
+            {
+                showCommandPrompt(activity);
+                break;
+            }
+            case COMMAND_EXIT_APP:
+            {
+                activity.finish();
+                break;
+            }
+            default:
+                handled = false;
+        }
+
+        return handled;
+    }
+
+    // Minimal stand-in for the Quick Commands dialog: one console line per run.
+    private static String lastCommand = "";
+
+    static private void showCommandPrompt(final Activity activity)
+    {
+        final EditText input = new EditText(activity);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setText(lastCommand);
+        input.setSelectAllOnFocus(true);
+        input.setSingleLine(true);
+
+        new AlertDialog.Builder(activity)
+                .setTitle("Команда консоли")
+                .setView(input)
+                .setPositiveButton("Выполнить", (dialog, which) ->
+                {
+                    String command = input.getText().toString().trim();
+                    if (!command.isEmpty())
+                    {
+                        lastCommand = command;
+                        NativeLib.executeCommand(command);
+                    }
+                })
+                .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    // One fixed slot instead of the stock RecyclerView layout browser: the saved dir must be numeric
+    // for that UI, and this build has no reason to keep several layouts around.
+    static private void showLayoutDialog(final Activity activity)
+    {
+        final File slot = new File(userFiles + "/touch_layouts", "bloodtouch");
+        final boolean hasSaved = slot.isDirectory();
+
+        String[] options = hasSaved
+                ? new String[]{"Загрузить сохранённую раскладку", "Сохранить текущую поверх сохранённой"}
+                : new String[]{"Сохранить текущую раскладку"};
+
+        new AlertDialog.Builder(activity)
+                .setTitle("Раскладка тача")
+                .setItems(options, (dialog, which) ->
+                {
+                    int error;
+                    if (hasSaved && which == 0)
+                        error = NativeLib.loadTouchSettings(slot.getAbsolutePath());
+                    else
+                    {
+                        slot.mkdirs();
+                        error = NativeLib.saveTouchSettings(slot.getAbsolutePath());
+                    }
+                    Toast.makeText(activity, error == 0 ? "Раскладка " + (hasSaved && which == 0 ? "загружена" : "сохранена")
+                                                            : "ОШИБКА раскладки: " + error, Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    static void sendWeaponWheelSettings(Context context)
+    {
+        int useMoveStick = AppSettings.getBoolOption(context, "weapon_wheel_move_stick", true) ? 1 : 0;
+        int mode = AppSettings.getIntOption(context, "weapon_wheel_button_mode", 0);
+        int autoTimeout = AppSettings.getIntOption(context, "weapon_wheel_auto_timeout", 0);
+        NativeLib.weaponWheelSettings(useMoveStick, mode, autoTimeout);
+    }
+
+}

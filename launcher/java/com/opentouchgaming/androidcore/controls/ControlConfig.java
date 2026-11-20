@@ -1,0 +1,313 @@
+package com.opentouchgaming.androidcore.controls;
+
+import static com.opentouchgaming.androidcore.DebugLog.Level.D;
+
+import android.app.Activity;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
+import com.opentouchgaming.androidcore.AppInfo;
+import com.opentouchgaming.androidcore.DebugLog;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Iterator;
+
+public class ControlConfig implements Serializable
+{
+    public static final int LOOK_MODE_MOUSE = 0;
+    public static final int LOOK_MODE_ABSOLUTE = 1;
+    public static final int LOOK_MODE_JOYSTICK = 2;
+    public static final int LOOK_MODE_GYRO = 3;
+    static final String CONFIG_EXT = ".padconfig";
+
+    private static final long serialVersionUID = 1L;
+    static DebugLog log;
+
+    static
+    {
+        log = new DebugLog(DebugLog.Module.CONTROLS, "ControlConfig");
+    }
+
+    String configFilename;
+    ActionInputDefinition gamepadDefinition;
+    ArrayList<ActionInput> actions = new ArrayList<ActionInput>();
+    ActionInput actionMonitor = null;
+    boolean monitoring = false;
+    boolean gotInput = false;
+    Listener listener;
+    int[] axisTest = {
+            /*
+            MotionEvent.AXIS_GENERIC_1,
+			MotionEvent.AXIS_GENERIC_2,
+			MotionEvent.AXIS_GENERIC_3,
+			MotionEvent.AXIS_GENERIC_4,
+			MotionEvent.AXIS_GENERIC_5,
+			MotionEvent.AXIS_GENERIC_6,
+			MotionEvent.AXIS_GENERIC_7,
+			MotionEvent.AXIS_GENERIC_8,
+			MotionEvent.AXIS_GENERIC_9,
+			MotionEvent.AXIS_GENERIC_10,
+			MotionEvent.AXIS_GENERIC_11,
+			MotionEvent.AXIS_GENERIC_12,
+			MotionEvent.AXIS_GENERIC_13,
+			MotionEvent.AXIS_GENERIC_14,
+			MotionEvent.AXIS_GENERIC_15,
+			MotionEvent.AXIS_GENERIC_16,
+			 */
+
+            MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y, MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_RTRIGGER, MotionEvent.AXIS_RUDDER, MotionEvent.AXIS_RX,
+            MotionEvent.AXIS_RY, MotionEvent.AXIS_RZ, MotionEvent.AXIS_THROTTLE, MotionEvent.AXIS_X, MotionEvent.AXIS_Y, MotionEvent.AXIS_Z,
+            MotionEvent.AXIS_BRAKE, MotionEvent.AXIS_GAS,};
+
+    public ControlConfig(ActionInputDefinition gamepadDefinition, Listener listener)
+    {
+        this.gamepadDefinition = gamepadDefinition;
+        reset();
+        this.listener = listener;
+    }
+
+    void reset()
+    {
+        actions.clear();
+
+        Iterator<ActionInput> iterator = gamepadDefinition.actions.iterator();
+        while (iterator.hasNext())
+        {
+            actions.add(iterator.next().clone());
+        }
+    }
+
+    void saveControls(String filename) throws IOException
+    {
+        log.log(D, "saveControls, file = " + filename);
+
+        configFilename = filename;
+
+        File file = new File(AppInfo.getGamepadDirectory() + "/" + configFilename);
+
+        ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(file));
+
+        out.writeObject(actions);
+        out.close();
+    }
+
+    public void loadControls(String filename) throws IOException, ClassNotFoundException
+    {
+        log.log(D, "loadControls, file = " + filename);
+
+        configFilename = filename;
+
+        File file = new File(AppInfo.getGamepadDirectory() + "/" + configFilename);
+
+        ObjectInputStream in = new ObjectInputStream(new FileInputStream(file));
+
+        ArrayList<ActionInput> cd = (ArrayList<ActionInput>) in.readObject();
+
+        log.log(D, "loadControls, file loaded OK");
+
+        in.close();
+
+        for (ActionInput d : cd)
+        {
+            for (ActionInput a : actions)
+            {
+                if (d.tag != null && a.tag != null && d.tag.contentEquals(a.tag))
+                {
+                    a.invert = d.invert;
+                    a.source = d.source;
+                    a.sourceType = d.sourceType;
+                    a.sourcePositive = d.sourcePositive;
+                    a.scale = d.scale;
+                    a.deadZone = d.deadZone;
+                    if (a.scale == 0)
+                        a.scale = 1;
+                    if (a.deadZone == 0)
+                        a.deadZone = 0.2f;
+                }
+            }
+        }
+
+        //Now check no buttons are also assigned to analog, if it is, clear the buttons
+        //This is because n00bs keep assigning movment analog AND buttons!
+        for (ActionInput a : actions)
+        {
+            if ((a.source != -1) && (a.sourceType == ActionInput.SourceType.AXIS) && (a.actionType == ActionInput.ActionType.BUTTON))
+            {
+                for (ActionInput a_check : actions)
+                {
+                    if ((a_check.sourceType == ActionInput.SourceType.AXIS) && (a_check.actionType == ActionInput.ActionType.ANALOG))
+                    {
+                        if (a.source == a_check.source)
+                        {
+                            a.source = -1;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        in.close();
+    }
+
+
+    void updated()
+    {
+        log.log(D, "updated");
+
+        try
+        {
+            saveControls(configFilename);
+        }
+        catch (IOException e)
+        {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    public boolean showExtraOptions(Activity act, int pos)
+    {
+        final ActionInput in = actions.get(pos);
+
+        if (in.extraDialog != null)
+        {
+            in.extraDialog.show(act, in, this::updated);
+            return true;
+        }
+        else
+            return false;
+    }
+
+    public void startMonitor(Activity act, int pos)
+    {
+        actionMonitor = actions.get(pos);
+
+        // Don't set the headers!
+        if (actionMonitor.tag == null)
+            return;
+
+        monitoring = true;
+        gotInput = false;
+        if (listener != null)
+            listener.startMonitoring(actionMonitor);
+    }
+
+    public void stopMonitor()
+    {
+        monitoring = false;
+        if (listener != null)
+            listener.finishedMonitoring();
+    }
+
+    public boolean onGenericMotionEvent(MotionEvent event)
+    {
+        log.log(D, "onGenericMotionEvent");
+
+        if (monitoring)
+        {
+            if (actionMonitor != null && !gotInput)
+            {
+                for (int a : axisTest)
+                {
+                    if (Math.abs(event.getAxisValue(a)) > 0.6)
+                    {
+                        actionMonitor.source = a;
+                        actionMonitor.sourceType = ActionInput.SourceType.AXIS;
+                        //Used for button actions
+                        actionMonitor.sourcePositive = event.getAxisValue(a) > 0;
+
+                        //monitoring = false;
+                        gotInput = true;
+
+                        log.log(D, actionMonitor.description + " = Analog (" + actionMonitor.source + ")");
+
+                        updated();
+                        return true;
+                    }
+                }
+            }
+            else // Keep monitoring until all the axis are back in the centre
+            {
+                boolean allCentre = true;
+                for (int a : axisTest)
+                {
+                    if (Math.abs(event.getAxisValue(a)) > 0.2)
+                    {
+                        allCentre = false;
+                    }
+                }
+                if (allCentre)
+                {
+                    stopMonitor();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public boolean isMonitoring()
+    {
+        return monitoring;
+    }
+
+    public boolean onKeyDown(int keyCode, KeyEvent event)
+    {
+        log.log(D, "onKeyDown " + keyCode);
+
+        if (monitoring)
+        {
+            if (keyCode == KeyEvent.KEYCODE_BACK) //Cancel and clear button assignment
+            {
+                actionMonitor.source = -1;
+                actionMonitor.sourceType = ActionInput.SourceType.BUTTON;
+
+                stopMonitor();
+                updated();
+                return true;
+            }
+            else
+            {
+                if (actionMonitor != null)
+                {
+                    if (actionMonitor.actionType != ActionInput.ActionType.ANALOG)
+                    {
+                        actionMonitor.source = keyCode;
+                        actionMonitor.sourceType = ActionInput.SourceType.BUTTON;
+
+                        stopMonitor();
+                        updated();
+                        return true;
+                    }
+                }
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    public boolean onKeyUp(int keyCode, KeyEvent event)
+    {
+        return monitoring;
+    }
+
+    public int getSize()
+    {
+        return actions.size();
+    }
+
+    public interface Listener
+    {
+        void startMonitoring(ActionInput action);
+
+        void finishedMonitoring();
+    }
+}
